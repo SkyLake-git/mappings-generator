@@ -7,7 +7,7 @@ public class Main {
 
         MappingsGenerator generator = new MappingsGenerator();
         generator.generateItems();
-        BlockGenerator.generate();
+        //BlockGenerator.generate();
         CollisionGenerator.generate();
         generator.generateSounds();
         generator.generateBiomes();

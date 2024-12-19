@@ -47,7 +47,7 @@ public final class BlockGenerator {
         // Register BLOCK_OVERRIDES here
     }
 
-    public static final Map<String, List<String>> STATES = new HashMap<>();
+    public static final Map<String, Set<Map.Entry<String, Object>>> STATES = new HashMap<>();
 
     public static void generate() {
         BlockMappers.registerMappers();
@@ -94,16 +94,9 @@ public final class BlockGenerator {
                 String identifier = entry.getString("name");
                 if (!STATES.containsKey(identifier)) {
                     NbtMap states = entry.getCompound("states");
-                    List<String> stateKeys = new ArrayList<>(states.keySet());
-                    // ignore some useless keys
-                    stateKeys.remove("stone_slab_type");
-                    stateKeys.remove("stone_type"); // added to minecraft:stone
-                    STATES.put(identifier, stateKeys);
+                    STATES.put(identifier, states.entrySet());
                 }
             }
-            // Some State Corrections
-            STATES.put("minecraft:attached_pumpkin_stem", Arrays.asList("growth", "facing_direction"));
-            STATES.put("minecraft:attached_melon_stem", Arrays.asList("growth", "facing_direction"));
 
             List<Pair<BlockState, BlockEntry>> newMappings = new ArrayList<>(Block.BLOCK_STATE_REGISTRY.size());
 
@@ -138,7 +131,7 @@ public final class BlockGenerator {
                         String bedrockIdentifier = pair.value().bedrockIdentifier();
                         if (javaIdentifier.equals(bedrockIdentifier)) {
                             // We don't need to store the name if it's the same between both platforms
-                            return Pair.of(pair.key(), new BlockEntry(null, pair.value().state()));
+                            return Pair.of(pair.key(), new BlockEntry(null, null, pair.value().state()));
                         }
                         return pair;
                     })
@@ -172,7 +165,7 @@ public final class BlockGenerator {
         String trimmedIdentifier = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
         Block block = state.getBlock();
         if (FeatureFlags.isExperimental(block.requiredFeatures())) {
-            return new BlockEntry("unknown", new CompoundTag());
+            return new BlockEntry("unknown", null, new CompoundTag());
         }
 
         String bedrockIdentifier;
@@ -253,24 +246,7 @@ public final class BlockGenerator {
         // BlockEntry#state() should never be null
         CompoundTag bedrockStates = blockEntry != null ? blockEntry.state() : new CompoundTag();
 
-        if (blockEntry != null && STATES.get("minecraft:" + blockEntry.bedrockIdentifier()) != null) {
-            List<String> toRemove = new ArrayList<>();
-            // Since we now rely on block states being exact after 1.16.100, we need to remove any old states
-            for (String key : bedrockStates.getAllKeys()) {
-                List<String> states = STATES.get("minecraft:" + blockEntry.bedrockIdentifier());
-                if (!states.contains(key) &&
-                        !key.contains("stone_slab_type")) { // Ignore the stone slab types since we ignore them above
-                    toRemove.add(key);
-                }
-            }
-            for (String key : toRemove) {
-                bedrockStates.remove(key);
-            }
-        } else if (blockEntry != null) {
-            System.out.println("States for " + blockEntry.bedrockIdentifier() + " not found!");
-        } else {
-            System.out.println("Block entry for " + blockStateToString(state) + " is null?");
-        }
+        Set<Map.Entry<String, Object>> stateKeys = STATES.get("minecraft:" + bedrockIdentifier);
 
         for (BlockMapper blockMapper : BlockMapper.ALL_MAPPERS) {
             blockMapper.apply(state, bedrockStates);
@@ -299,54 +275,25 @@ public final class BlockGenerator {
             bedrockStates.putInt("multi_face_direction_bits", bitset);
         }
 
-        else if (trimmedIdentifier.endsWith("_cauldron")) {
-            if (trimmedIdentifier.equals("minecraft:lava_cauldron")) {
-                // Only one fill level option
-                bedrockStates.putInt("fill_level", 6);
+        bedrockIdentifier = "minecraft:" + bedrockIdentifier;
+
+        if (stateKeys != null){
+            for (Map.Entry<String, Object> stateKey : stateKeys) {
+                Object obj = stateKey.getValue();
+                System.out.println("Putting key: " + stateKey.getKey() + " = " + obj);
+	            switch (obj) {
+		            case Boolean bl -> bedrockStates.putBoolean(stateKey.getKey(), bl);
+		            case Integer i -> bedrockStates.putInt(stateKey.getKey(), i);
+		            case Float v -> bedrockStates.putFloat(stateKey.getKey(), v);
+		            case Double v -> bedrockStates.putDouble(stateKey.getKey(), v);
+                    case String v -> bedrockStates.putString(stateKey.getKey(), v);
+		            case null, default -> System.out.println("Unused state key: " + stateKey.getKey() + " value: " + obj);
+	            }
             }
         }
 
-        else if (trimmedIdentifier.contains("big_dripleaf")) {
-            boolean isHead = !trimmedIdentifier.contains("stem");
-            bedrockStates.putBoolean("big_dripleaf_head", isHead);
-            if (!isHead) {
-                bedrockStates.putString("big_dripleaf_tilt", "none");
-            }
-        } else if (trimmedIdentifier.endsWith("_leaves") ||
-                trimmedIdentifier.contains("azalea_leaves")) {
-            bedrockStates.putBoolean("update_bit", false);
-        }
 
-        if (bedrockIdentifier.contains("flower_pot")) {
-            bedrockStates.putBoolean("update_bit", false);
-        }
-
-        List<String> stateKeys = STATES.get(bedrockIdentifier);
-        if (stateKeys != null) {
-            stateKeys.forEach(key -> {
-                if (trimmedIdentifier.contains("minecraft:shulker_box")) return;
-                if (!bedrockStates.contains(key)) {
-                    bedrockStates.putString(key, "MANUALMAP");
-                }
-            });
-        }
-
-        // Use this hacky but handy bit of code to help migrate mappings to new versions!
-//        if (true) {
-//            NbtMap cloudburstStates = (NbtMap) NbtOps.INSTANCE.convertTo(CloudburstNbtOps.INSTANCE, bedrockStates);
-//            NbtMap cloudburstNbt = NbtMap.builder()
-//                    .putString("name", "minecraft:" + bedrockIdentifier)
-//                    .putCompound("states", cloudburstStates)
-//                    .build();
-//            cloudburstNbt = BlockStateUpdaters.updateBlockState(cloudburstNbt, OLD_VERSION);
-//            CompoundTag newStates = (CompoundTag) CloudburstNbtOps.INSTANCE.convertTo(NbtOps.INSTANCE, cloudburstNbt);
-//            newStates.remove("version");
-//            String newName = newStates.getString("name");
-//            newStates.remove("name");
-//            return new BlockEntry(newName.substring("minecraft:".length()), newStates.getCompound("states"));
-//        }
-
-        return new BlockEntry(bedrockIdentifier, bedrockStates);
+        return new BlockEntry(bedrockIdentifier, null, bedrockStates);
     }
 
     private static final int OLD_VERSION = CompoundTagUpdaterContext.makeVersion(1, 21, 20);

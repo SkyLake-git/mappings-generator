@@ -13,10 +13,11 @@ import net.minecraft.world.level.block.state.BlockState;
 import java.math.BigDecimal;
 import java.util.List;
 
-public record BlockEntry(String bedrockIdentifier, CompoundTag state) {
+public record BlockEntry(String bedrockIdentifier, Boolean isLiquid, CompoundTag state) {
     static final Codec<BlockEntry> CODEC = RecordCodecBuilder.create(instance ->
             instance.group(
                     Codec.STRING.optionalFieldOf("bedrock_identifier", null).forGetter(BlockEntry::bedrockIdentifier),
+                    Codec.BOOL.optionalFieldOf("is_liquid", null).forGetter(BlockEntry::isLiquid),
                     CompoundTag.CODEC.optionalFieldOf("state", new CompoundTag()).forGetter(BlockEntry::state)
             ).apply(instance, BlockEntry::new));
     static final Codec<List<BlockEntry>> LIST_CODEC = Codec.list(CODEC);

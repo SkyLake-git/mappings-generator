@@ -48,15 +48,13 @@ public final class CollisionGenerator {
             try {
                 state.getCollisionShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO).toAabbs().forEach(item -> {
                     List<Double> coordinateList = Lists.newArrayList();
-                    // Convert Box class to an array of coordinates
-                    // They need to be converted from min/max coordinates to centres and sizes
-                    coordinateList.add(item.minX + ((item.maxX - item.minX) / 2));
-                    coordinateList.add(item.minY + ((item.maxY - item.minY) / 2));
-                    coordinateList.add(item.minZ + ((item.maxZ - item.minZ) / 2));
+                    coordinateList.add(item.minX);
+                    coordinateList.add(item.minY);
+                    coordinateList.add(item.minZ);
 
-                    coordinateList.add(item.maxX - item.minX);
-                    coordinateList.add(item.maxY - item.minY);
-                    coordinateList.add(item.maxZ - item.minZ);
+                    coordinateList.add(item.maxX);
+                    coordinateList.add(item.maxY);
+                    coordinateList.add(item.maxZ);
 
                     collisionBoxes.add(coordinateList);
                 });
